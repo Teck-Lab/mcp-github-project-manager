@@ -12,7 +12,7 @@
  * Node ID resolution is handled internally.
  */
 
-import { GitHubRepositoryFactory } from "../github/GitHubRepositoryFactory";
+import type { GitHubRepositoryFactory } from "../github/GitHubRepositoryFactory";
 import { ANNOTATION_PATTERNS } from "./annotations/tool-annotations";
 import {
   type AddSubIssueInput,
@@ -35,7 +35,7 @@ import {
   SubIssueOperationOutputSchema,
 } from "./schemas/sub-issue-schemas";
 import type { ToolDefinition, ToolSchema } from "./ToolValidator";
-import { requireToken } from "./tool-factory";
+import { createGitHubFactory } from "./tool-factory";
 
 // ============================================================================
 // Helper Functions
@@ -45,11 +45,7 @@ import { requireToken } from "./tool-factory";
  * Creates a repository factory with the given credentials.
  */
 function createFactory(owner: string, repo: string): GitHubRepositoryFactory {
-  const token = requireToken();
-  if (!token) {
-    throw new Error("GITHUB_TOKEN environment variable is required");
-  }
-  return new GitHubRepositoryFactory(token, owner, repo);
+  return createGitHubFactory(owner, repo);
 }
 
 /**

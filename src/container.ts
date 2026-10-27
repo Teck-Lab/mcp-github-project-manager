@@ -43,7 +43,12 @@
  */
 import "reflect-metadata";
 import { container, type DependencyContainer } from "tsyringe";
-import { AGENT_RECLAIM_ENABLED, AGENT_RECLAIM_INTERVAL_MS, AGENT_STALE_AFTER_MINUTES } from "./env";
+import {
+  AGENT_RECLAIM_ENABLED,
+  AGENT_RECLAIM_INTERVAL_MS,
+  AGENT_STALE_AFTER_MINUTES,
+  getGitHubAppCredentials,
+} from "./env";
 import { AgentStore } from "./infrastructure/agent/AgentStore";
 import { ProjectFieldSetup } from "./infrastructure/agent/ProjectFieldSetup";
 import { WorkProductStore } from "./infrastructure/agent/WorkProductStore";
@@ -104,7 +109,9 @@ export function configureContainer(
   container.clearInstances();
 
   // Register factory instance - root of dependency tree
-  const factory = new GitHubRepositoryFactory(token, owner, repo);
+  const factory = new GitHubRepositoryFactory(token, owner, repo, {
+    app: getGitHubAppCredentials(),
+  });
   container.registerInstance("GitHubRepositoryFactory", factory);
 
   // Register Logger as ILogger for dependency injection
@@ -353,7 +360,9 @@ export function createProjectManagementService(
   repo: string,
   token: string
 ): ProjectManagementService {
-  const factory = new GitHubRepositoryFactory(token, owner, repo);
+  const factory = new GitHubRepositoryFactory(token, owner, repo, {
+    app: getGitHubAppCredentials(),
+  });
   const logger = Logger.getInstance();
   const templateService = new ProjectTemplateService(factory);
   const linkingService = new ProjectLinkingService(factory);

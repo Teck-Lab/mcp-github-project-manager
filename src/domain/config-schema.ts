@@ -23,11 +23,39 @@ const booleanFlag = (defaultValue: boolean) =>
     });
 
 /** GitHub configuration — required for all operations. */
-export const GitHubConfigSchema = z.object({
-  GITHUB_TOKEN: nonEmptyString,
-  GITHUB_OWNER: nonEmptyString,
-  GITHUB_REPO: nonEmptyString,
-});
+export const GitHubConfigSchema = z
+  .object({
+    GITHUB_TOKEN: z.string().optional(),
+    GITHUB_OWNER: nonEmptyString,
+    GITHUB_REPO: nonEmptyString,
+    GITHUB_APP_ID: z.string().optional(),
+    GITHUB_APP_INSTALLATION_ID: z.string().optional(),
+    GITHUB_APP_PRIVATE_KEY: z.string().optional(),
+  })
+  .superRefine((config, ctx) => {
+    const appKeys = [
+      "GITHUB_APP_ID",
+      "GITHUB_APP_INSTALLATION_ID",
+      "GITHUB_APP_PRIVATE_KEY",
+    ] as const;
+    if (appKeys.some((key) => config[key]?.trim())) {
+      for (const key of appKeys) {
+        if (!config[key]?.trim()) {
+          ctx.addIssue({
+            code: "custom",
+            path: [key],
+            message: "Required for GitHub App authentication",
+          });
+        }
+      }
+    } else if (!config.GITHUB_TOKEN?.trim()) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["GITHUB_TOKEN"],
+        message: "Provide a token or complete GitHub App credentials",
+      });
+    }
+  });
 
 /** AI provider keys — all optional; absence produces a warning, not a failure. */
 export const AIConfigSchema = z.object({
@@ -108,6 +136,9 @@ export function validateConfig(env: Record<string, string | undefined>): ServerC
       GITHUB_TOKEN: env.GITHUB_TOKEN,
       GITHUB_OWNER: env.GITHUB_OWNER,
       GITHUB_REPO: env.GITHUB_REPO,
+      GITHUB_APP_ID: env.GITHUB_APP_ID,
+      GITHUB_APP_INSTALLATION_ID: env.GITHUB_APP_INSTALLATION_ID,
+      GITHUB_APP_PRIVATE_KEY: env.GITHUB_APP_PRIVATE_KEY,
     },
     ai: {
       ANTHROPIC_API_KEY: env.ANTHROPIC_API_KEY ?? "",

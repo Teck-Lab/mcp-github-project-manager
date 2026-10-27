@@ -170,43 +170,29 @@ export abstract class BaseGitHubRepository implements IGitHubRepository {
    * Resolve an owner login (user or organization) to its GitHub node ID
    *
    * GraphQL mutations like createProjectV2 require the owner's node ID
-   * (e.g. 'U_kgDO...' or 'O_kgDO...'), not the login. Resolves users first,
-   * then falls back to organizations.
+   * (e.g. 'U_kgDO...' or 'O_kgDO...'), not the login. The repositoryOwner
+   * query supports both types without a failing user lookup for organizations.
    *
    * @param login - The owner login (e.g. 'octocat' or 'github')
    * @returns The node ID of the user or organization
    * @throws Error if neither a user nor an organization resolves
    */
   protected async resolveOwnerNodeId(login: string): Promise<string> {
-    const userQuery = `
-      query GetUserNodeId($login: String!) {
-        user(login: $login) {
+    const query = `
+      query GetOwnerNodeId($login: String!) {
+        repositoryOwner(login: $login) {
           id
         }
       }
     `;
 
     interface OwnerNodeIdResponse {
-      user?: { id: string } | null;
-      organization?: { id: string } | null;
+      repositoryOwner: { id: string } | null;
     }
 
-    const userResponse = await this.graphql<OwnerNodeIdResponse>(userQuery, { login });
-    if (userResponse.user?.id) {
-      return userResponse.user.id;
-    }
-
-    const orgQuery = `
-      query GetOrganizationNodeId($login: String!) {
-        organization(login: $login) {
-          id
-        }
-      }
-    `;
-
-    const orgResponse = await this.graphql<OwnerNodeIdResponse>(orgQuery, { login });
-    if (orgResponse.organization?.id) {
-      return orgResponse.organization.id;
+    const response = await this.graphql<OwnerNodeIdResponse>(query, { login });
+    if (response.repositoryOwner?.id) {
+      return response.repositoryOwner.id;
     }
 
     throw new Error(`Could not resolve owner '${login}' to a GitHub user or organization`);

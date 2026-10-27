@@ -42,6 +42,7 @@ import {
   GITHUB_OWNER,
   GITHUB_REPO,
   GITHUB_TOKEN,
+  getGitHubAppCredentials,
   SSE_ENABLED,
   SYNC_ENABLED,
   SYNC_TIMEOUT_MS,
@@ -1257,7 +1258,7 @@ class GitHubProjectManagerServer {
         process.stderr.write(`- Owner: ${GITHUB_OWNER}\n`);
         process.stderr.write(`- Repository: ${GITHUB_REPO}\n`);
         process.stderr.write(
-          `- Token: ${GITHUB_TOKEN.substring(0, 4)}...${GITHUB_TOKEN.substring(GITHUB_TOKEN.length - 4)}\n`
+          `- GitHub authentication: ${getGitHubAppCredentials() ? "App installation" : "token"}\n`
         );
         process.stderr.write(`- Environment file: ${CLI_OPTIONS.envFile || ".env (default)"}\n`);
         process.stderr.write(`- Sync enabled: ${SYNC_ENABLED}\n`);
