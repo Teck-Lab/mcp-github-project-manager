@@ -53,7 +53,7 @@ exactly like `pnpm run <script>`, and `npm test` like `pnpm test`.
 
 ## Environment (`.env` or CLI flags; CLI wins)
 
-- Required: `GITHUB_TOKEN`, `GITHUB_OWNER`, `GITHUB_REPO`.
+- Required: `GITHUB_OWNER`, `GITHUB_REPO`, plus either `GITHUB_TOKEN` or complete GitHub App installation credentials.
 - GitHub credential chain, first hit wins:
   `--token` CLI flag → `$SECRETS_DIR/GITHUB_TOKEN` file → `GITHUB_TOKEN` env →
   `gh auth token`. The `gh` fallback means a developer with a working `gh` login
@@ -61,8 +61,9 @@ exactly like `pnpm run <script>`, and `npm test` like `pnpm test`.
   (it is also off automatically under `NODE_ENV=test`, so tests never shell out).
 - GitHub App installation auth (optional, outranks the PAT when all three are
   set): `GITHUB_APP_ID`, `GITHUB_APP_PRIVATE_KEY`, `GITHUB_APP_INSTALLATION_ID`.
-  A partial App config falls back to the PAT rather than failing, so a half-set
-  environment cannot lock the server out.
+  App-only deployments need no PAT. Partial App configuration fails startup;
+  it never falls back to a personal credential. App configurations also disable
+  the `gh auth token` fallback. Octokit renews installation tokens automatically.
 - Every credential read goes through `getSecret()`/`requireToken()`. Do NOT read
   `process.env.GITHUB_TOKEN` directly — that bypasses the whole chain, which is
   exactly how `SECRETS_DIR` and `--token` were silently broken before.

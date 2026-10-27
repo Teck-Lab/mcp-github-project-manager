@@ -94,6 +94,9 @@ if (process.env.NODE_ENV !== "test") {
  * rotated secrets when the mounted file changes.
  */
 export function getSecret(name: string): string | undefined {
+  if (name === "GITHUB_TOKEN" && cliOptions.token) return cliOptions.token;
+  if (name === "GITHUB_OWNER" && cliOptions.owner) return cliOptions.owner;
+  if (name === "GITHUB_REPO" && cliOptions.repo) return cliOptions.repo;
   return secretResolver.resolve(name);
 }
 
@@ -185,7 +188,7 @@ export const GITHUB_TOKEN = isTestEnv
   ? isRealE2E
     ? process.env.GITHUB_TOKEN || "test-token"
     : "test-token"
-  : getConfigValue("GITHUB_TOKEN", cliOptions.token);
+  : getOptionalConfigValue("GITHUB_TOKEN", "", cliOptions.token);
 export const GITHUB_OWNER = isTestEnv
   ? isRealE2E
     ? process.env.GITHUB_OWNER || "test-owner"
@@ -206,17 +209,20 @@ export const GITHUB_APP_INSTALLATION_ID = getOptionalConfigValue("GITHUB_APP_INS
 
 /**
  * GitHub App credentials, or undefined when the App is not fully configured.
- * All three values are required — a partial configuration falls back to the PAT
- * rather than failing, so a half-set env cannot lock the server out.
+ * All three values are required. Reject partial configuration instead of
+ * silently switching an App deployment to a personal account.
  */
 export function getGitHubAppCredentials():
   | { appId: string; privateKey: string; installationId: string }
   | undefined {
-  const appId = getOptionalConfigValue("GITHUB_APP_ID", "");
+  const appId = getOptionalConfigValue("GITHUB_APP_ID", "").trim();
   const privateKey = getOptionalConfigValue("GITHUB_APP_PRIVATE_KEY", "");
-  const installationId = getOptionalConfigValue("GITHUB_APP_INSTALLATION_ID", "");
-  if (!appId || !privateKey || !installationId) {
-    return undefined;
+  const installationId = getOptionalConfigValue("GITHUB_APP_INSTALLATION_ID", "").trim();
+  if (!appId && !privateKey.trim() && !installationId) return undefined;
+  if (!appId || !privateKey.trim() || !installationId) {
+    throw new Error(
+      "GitHub App authentication requires GITHUB_APP_ID, GITHUB_APP_INSTALLATION_ID and GITHUB_APP_PRIVATE_KEY"
+    );
   }
   // Private keys are commonly supplied with literal \n escapes in env vars.
   return { appId, privateKey: privateKey.replace(/\\n/g, "\n"), installationId };

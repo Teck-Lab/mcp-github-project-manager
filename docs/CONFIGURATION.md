@@ -21,11 +21,13 @@ Configuration sources are applied in this order of precedence:
 
 ### GitHub Configuration
 
-These variables are **required** for the MCP server to function:
+`GITHUB_OWNER` and `GITHUB_REPO` are required. Authenticate with either a token
+or complete GitHub App installation credentials. See [GitHub App authentication](GITHUB_APP_AUTH.md)
+for App-only configuration, automatic token renewal, and MCPHub/Coolify setup.
 
 | Variable | Description | Example |
 |----------|-------------|---------|
-| `GITHUB_TOKEN` | GitHub personal access token | `ghp_xxxxxxxxxxxxxxxxxxxx` |
+| `GITHUB_TOKEN` | GitHub access token; optional when complete App credentials are configured | `ghp_xxxxxxxxxxxxxxxxxxxx` |
 | `GITHUB_OWNER` | GitHub username or organization | `your-username` |
 | `GITHUB_REPO` | Repository name | `my-project` |
 

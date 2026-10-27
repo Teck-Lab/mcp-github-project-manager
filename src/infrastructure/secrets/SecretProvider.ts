@@ -124,7 +124,10 @@ export function createDefaultSecretResolver(env?: NodeJS.ProcessEnv): SecretReso
   // Opt out with GH_CLI_TOKEN_FALLBACK=false where shelling out is unwanted.
   const ghFallbackAllowed =
     config.NODE_ENV !== "test" &&
-    (config.GH_CLI_TOKEN_FALLBACK ?? "true").toLowerCase() !== "false";
+    (config.GH_CLI_TOKEN_FALLBACK ?? "true").toLowerCase() !== "false" &&
+    !["GITHUB_APP_ID", "GITHUB_APP_INSTALLATION_ID", "GITHUB_APP_PRIVATE_KEY"].some((name) =>
+      providers.some((provider) => provider.get(name)?.trim())
+    );
   if (ghFallbackAllowed) {
     providers.push(new GhCliSecretProvider());
   }

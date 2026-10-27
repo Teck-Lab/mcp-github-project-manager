@@ -38,7 +38,17 @@ export class GitHubRepositoryFactory {
   private readonly rateLimitManager: RateLimitManager;
 
   constructor(token: string, owner: string, repo: string, options: RepositoryFactoryOptions = {}) {
-    this.config = GitHubConfig.create(owner, repo, token);
+    const app = options.app;
+    if (app && (!app.appId || !app.installationId || !app.privateKey?.trim())) {
+      throw new Error("Complete GitHub App installation credentials are required");
+    }
+    this.config = GitHubConfig.create(
+      owner,
+      repo,
+      app ? "" : token,
+      undefined,
+      app ? "app" : "token"
+    );
     this.errorHandler = new GitHubErrorHandler();
 
     // GitHub App installation auth when configured, otherwise a PAT. This is
@@ -181,7 +191,7 @@ export class GitHubRepositoryFactory {
     },
     options?: RepositoryFactoryOptions
   ): GitHubRepositoryFactory {
-    if (!env.GITHUB_TOKEN || !env.GITHUB_OWNER || !env.GITHUB_REPO) {
+    if ((!options?.app && !env.GITHUB_TOKEN) || !env.GITHUB_OWNER || !env.GITHUB_REPO) {
       throw new Error("Missing required GitHub configuration");
     }
 

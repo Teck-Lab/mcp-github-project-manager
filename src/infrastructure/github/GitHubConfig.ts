@@ -1,18 +1,28 @@
+export type GitHubAuthMode = "token" | "app";
+
 export class GitHubConfig {
   #owner: string;
   #repo: string;
   #token: string;
   #projectId?: string;
+  readonly authMode: GitHubAuthMode;
 
-  constructor(owner: string, repo: string, token: string, projectId?: string) {
+  constructor(
+    owner: string,
+    repo: string,
+    token: string,
+    projectId?: string,
+    authMode: GitHubAuthMode = "token"
+  ) {
     if (!owner) throw new Error("Owner is required");
     if (!repo) throw new Error("Repository is required");
-    if (!token) throw new Error("Token is required");
+    if (authMode !== "app" && !token) throw new Error("Token is required");
 
     this.#owner = owner;
     this.#repo = repo;
     this.#token = token;
     this.#projectId = projectId;
+    this.authMode = authMode;
 
     // Make properties read-only but accessible
     Object.defineProperties(this, {
@@ -41,8 +51,14 @@ export class GitHubConfig {
     });
   }
 
-  static create(owner: string, repo: string, token: string, projectId?: string): GitHubConfig {
-    return new GitHubConfig(owner, repo, token, projectId);
+  static create(
+    owner: string,
+    repo: string,
+    token: string,
+    projectId?: string,
+    authMode: GitHubAuthMode = "token"
+  ): GitHubConfig {
+    return new GitHubConfig(owner, repo, token, projectId, authMode);
   }
 }
 
