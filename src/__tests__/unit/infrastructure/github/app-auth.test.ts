@@ -6,6 +6,7 @@ import { configureContainer, createProjectManagementService } from "../../../../
 import { validateConfig } from "../../../../domain/config-schema";
 import { getGitHubAppCredentials } from "../../../../env";
 import { GitHubRepositoryFactory } from "../../../../infrastructure/github/GitHubRepositoryFactory";
+import { BaseGitHubRepository } from "../../../../infrastructure/github/repositories/BaseRepository";
 import { GitHubApiUtil } from "../../../../infrastructure/github/util/GitHubApiUtil";
 import { executeListLinkedRepositories } from "../../../../infrastructure/tools/project-linking-tools";
 import { createGitHubFactory } from "../../../../infrastructure/tools/tool-factory";
@@ -25,6 +26,12 @@ const appEnv = {
   GITHUB_APP_INSTALLATION_ID: app.installationId,
   GITHUB_APP_PRIVATE_KEY: privateKey,
 };
+
+class OwnerResolutionProbe extends BaseGitHubRepository {
+  resolveOwner(login: string) {
+    return this.resolveOwnerNodeId(login);
+  }
+}
 
 function issueInstallationToken(token: string) {
   return nock("https://api.github.com")
@@ -208,5 +215,82 @@ describe("GitHub App installation authentication", () => {
     const client = createGitHubFactory(owner, repo).getOctokit() as unknown as Octokit;
     await client.rest.issues.listMilestones({ owner, repo });
     expect(api.isDone()).toBe(true);
+  });
+
+  it.each(["O_fixture_organization", "U_fixture_user"])(
+    "creates an App-owned project using repository owner ID %s",
+    async (ownerId) => {
+      vi.spyOn(GitHubApiUtil.getInstance(), "shouldThrottle").mockResolvedValue(false);
+      const exchange = issueInstallationToken(`ghs_project_${ownerId}`);
+      const ownerApi = nock("https://api.github.com")
+        .post(
+          "/graphql",
+          (body) => body.query.includes("repositoryOwner(login:") && body.variables.login === owner
+        )
+        .matchHeader("authorization", new RegExp(`^(token|bearer) ghs_project_${ownerId}$`, "i"))
+        .reply(200, { data: { repositoryOwner: { id: ownerId } } });
+      const repoApi = nock("https://api.github.com")
+        .post("/graphql", (body) => body.query.includes("GetRepositoryNodeId"))
+        .reply(200, { data: { repository: { id: "R_fixture" } } });
+      // GitHub returns an error, not a successful null user, for an org login.
+      nock("https://api.github.com")
+        .post("/graphql", (body) => body.query.includes("user(login:"))
+        .reply(200, { errors: [{ type: "NOT_FOUND", message: "Could not resolve to a User" }] });
+      const createApi = nock("https://api.github.com")
+        .post("/graphql", (body) => {
+          if (!body.query.includes("createProjectV2")) return false;
+          expect(body.variables.input).toEqual({
+            ownerId,
+            repositoryId: "R_fixture",
+            title: "App project",
+          });
+          return true;
+        })
+        .reply(200, {
+          data: {
+            createProjectV2: {
+              projectV2: {
+                id: "PVT_fixture",
+                title: "App project",
+                shortDescription: null,
+                closed: false,
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+              },
+            },
+          },
+        });
+      const result = await new GitHubRepositoryFactory("", owner, repo, { app })
+        .createProjectRepository()
+        .create({ title: "App project", owner, visibility: "private", fields: [], views: [] });
+      expect(result.id).toBe("PVT_fixture");
+      expect(ownerApi.isDone() && repoApi.isDone() && createApi.isDone() && exchange.isDone()).toBe(
+        true
+      );
+    }
+  );
+
+  it("reports an unresolved repository owner", async () => {
+    vi.spyOn(GitHubApiUtil.getInstance(), "shouldThrottle").mockResolvedValue(false);
+    const exchange = issueInstallationToken("ghs_missing_owner");
+    const api = nock("https://api.github.com")
+      .post("/graphql", (body) => body.query.includes("repositoryOwner(login:"))
+      .reply(200, { data: { repositoryOwner: null } });
+    const factory = new GitHubRepositoryFactory("", owner, repo, { app });
+    const probe = new OwnerResolutionProbe(factory.getOctokit(), factory.getConfig());
+    await expect(probe.resolveOwner("missing-owner")).rejects.toThrow("Could not resolve owner");
+    expect(api.isDone() && exchange.isDone()).toBe(true);
+  });
+
+  it("preserves permission errors instead of treating them as an owner-type fallback", async () => {
+    vi.spyOn(GitHubApiUtil.getInstance(), "shouldThrottle").mockResolvedValue(false);
+    const exchange = issueInstallationToken("ghs_denied_owner");
+    const api = nock("https://api.github.com")
+      .post("/graphql", (body) => body.query.includes("repositoryOwner(login:"))
+      .reply(403, { message: "Resource not accessible by integration" });
+    const factory = new GitHubRepositoryFactory("", owner, repo, { app });
+    const probe = new OwnerResolutionProbe(factory.getOctokit(), factory.getConfig());
+    await expect(probe.resolveOwner(owner)).rejects.toThrow(/not accessible by integration/);
+    expect(api.isDone() && exchange.isDone()).toBe(true);
   });
 });

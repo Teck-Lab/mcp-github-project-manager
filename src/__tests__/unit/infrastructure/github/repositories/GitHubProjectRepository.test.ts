@@ -12,7 +12,7 @@ vi.mock("@octokit/rest");
 
 describe("GitHubProjectRepository", () => {
   // createProjectV2 takes GraphQL node IDs, not the owner login / repo name, so
-  // `create()` resolves them first via GetUserNodeId + GetRepositoryNodeId.
+  // `create()` resolves them first via GetOwnerNodeId + GetRepositoryNodeId.
   const OWNER_NODE_ID = "U_kgDOtest-owner";
   const REPO_NODE_ID = "R_kgDOtest-repo";
 
@@ -70,7 +70,7 @@ describe("GitHubProjectRepository", () => {
 
       mockOctokit.graphql
         // Owner login -> node ID
-        .mockResolvedValueOnce({ user: { id: OWNER_NODE_ID } })
+        .mockResolvedValueOnce({ repositoryOwner: { id: OWNER_NODE_ID } })
         // Repo name -> node ID
         .mockResolvedValueOnce({ repository: { id: REPO_NODE_ID } })
         // Create mutation
@@ -110,7 +110,7 @@ describe("GitHubProjectRepository", () => {
       // Verify node-ID resolution happens before the mutation
       expect(mockOctokit.graphql).toHaveBeenNthCalledWith(
         1,
-        expect.stringContaining("query GetUserNodeId"),
+        expect.stringContaining("query GetOwnerNodeId"),
         expect.objectContaining({ login: config.owner })
       );
       expect(mockOctokit.graphql).toHaveBeenNthCalledWith(
@@ -179,7 +179,7 @@ describe("GitHubProjectRepository", () => {
       };
 
       mockOctokit.graphql
-        .mockResolvedValueOnce({ user: { id: OWNER_NODE_ID } })
+        .mockResolvedValueOnce({ repositoryOwner: { id: OWNER_NODE_ID } })
         .mockResolvedValueOnce({ repository: { id: REPO_NODE_ID } })
         .mockResolvedValueOnce({
           createProjectV2: {
@@ -262,6 +262,8 @@ describe("GitHubProjectRepository", () => {
 
       // Mock successful creation but failed description update
       mockOctokit.graphql
+        .mockResolvedValueOnce({ repositoryOwner: { id: OWNER_NODE_ID } })
+        .mockResolvedValueOnce({ repository: { id: REPO_NODE_ID } })
         .mockResolvedValueOnce({
           createProjectV2: {
             projectV2: mockCreateResponse,
