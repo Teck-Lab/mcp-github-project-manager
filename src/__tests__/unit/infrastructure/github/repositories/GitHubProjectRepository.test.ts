@@ -52,6 +52,8 @@ describe("GitHubProjectRepository", () => {
 
       const mockCreateResponse = {
         id: "PVT_kwDOLhQ7gc4AOEbH",
+        number: 42,
+        url: "https://github.com/orgs/test-owner/projects/42",
         title: projectData.title,
         shortDescription: null, // No description on creation
         closed: false,
@@ -61,6 +63,8 @@ describe("GitHubProjectRepository", () => {
 
       const mockUpdateResponse = {
         id: "PVT_kwDOLhQ7gc4AOEbH",
+        number: 42,
+        url: "https://github.com/orgs/test-owner/projects/42",
         title: projectData.title,
         shortDescription: projectData.shortDescription,
         closed: false,
@@ -96,8 +100,8 @@ describe("GitHubProjectRepository", () => {
         title: mockUpdateResponse.title,
         description: mockUpdateResponse.shortDescription,
         owner: config.owner,
-        number: parseInt(mockUpdateResponse.id.split("_").pop() || "0", 10),
-        url: `https://github.com/orgs/${config.owner}/projects/${parseInt(mockUpdateResponse.id.split("_").pop() || "0", 10)}`,
+        number: 42,
+        url: "https://github.com/orgs/test-owner/projects/42",
         status: ResourceStatus.ACTIVE,
         visibility: projectData.visibility,
         views: projectData.views,
@@ -171,6 +175,8 @@ describe("GitHubProjectRepository", () => {
 
       const mockCreateResponse = {
         id: "PVT_kwDOLhQ7gc4AOEbH",
+        number: 42,
+        url: "https://github.com/orgs/test-owner/projects/42",
         title: projectData.title,
         shortDescription: null,
         closed: false,
@@ -197,8 +203,8 @@ describe("GitHubProjectRepository", () => {
         title: mockCreateResponse.title,
         description: "", // Empty when no description provided
         owner: config.owner,
-        number: parseInt(mockCreateResponse.id.split("_").pop() || "0", 10),
-        url: `https://github.com/orgs/${config.owner}/projects/${parseInt(mockCreateResponse.id.split("_").pop() || "0", 10)}`,
+        number: 42,
+        url: "https://github.com/orgs/test-owner/projects/42",
         status: ResourceStatus.ACTIVE,
         visibility: projectData.visibility,
         views: projectData.views,
@@ -253,6 +259,8 @@ describe("GitHubProjectRepository", () => {
 
       const mockCreateResponse = {
         id: "PVT_kwDOLhQ7gc4AOEbH",
+        number: 42,
+        url: "https://github.com/orgs/test-owner/projects/42",
         title: projectData.title,
         shortDescription: null,
         closed: false,
@@ -277,11 +285,119 @@ describe("GitHubProjectRepository", () => {
   });
 
   describe("findById", () => {
+    it.each([
+      "https://github.com/orgs/test-owner/projects/42",
+      "https://github.com/users/test-owner/projects/42",
+    ])("preserves GitHub's Project number and URL %s", async (url) => {
+      mockOctokit.graphql.mockResolvedValueOnce({
+        node: {
+          id: "PVT_opaque_node_id",
+          number: 42,
+          url,
+          title: "Project",
+          shortDescription: null,
+          closed: false,
+          createdAt: "2026-01-01T00:00:00Z",
+          updatedAt: "2026-01-01T00:00:00Z",
+        },
+      });
+      const result = await repository.findById("PVT_opaque_node_id");
+      expect(result?.number).toBe(42);
+      expect(result?.url).toBe(url);
+      expect(mockOctokit.graphql).toHaveBeenCalledWith(
+        expect.stringMatching(/\bnumber\s+url\b/),
+        expect.anything()
+      );
+    });
+
+    it("discovers real Status option IDs and iteration configuration", async () => {
+      mockOctokit.graphql.mockResolvedValueOnce({
+        node: {
+          id: "PVT_opaque",
+          number: 42,
+          url: "https://github.com/orgs/test-owner/projects/42",
+          title: "Project",
+          shortDescription: null,
+          closed: false,
+          fields: {
+            nodes: [
+              {
+                __typename: "ProjectV2SingleSelectField",
+                id: "PVTSSF_status",
+                name: "Status",
+                dataType: "SINGLE_SELECT",
+                options: [
+                  { id: "option-done", name: "Done", color: "GREEN", description: "Finished" },
+                ],
+              },
+              {
+                __typename: "ProjectV2IterationField",
+                id: "PVTIF_iteration",
+                name: "Sprint",
+                dataType: "ITERATION",
+                configuration: { duration: 14, iterations: [{ startDate: "2026-01-05" }] },
+              },
+            ],
+          },
+        },
+      });
+      const project = await repository.findById("PVT_opaque");
+      expect(project?.fields).toEqual([
+        {
+          id: "PVTSSF_status",
+          name: "Status",
+          type: "single_select",
+          description: "",
+          options: [{ id: "option-done", name: "Done", color: "GREEN", description: "Finished" }],
+        },
+        {
+          id: "PVTIF_iteration",
+          name: "Sprint",
+          type: "iteration",
+          description: "",
+          config: { iterationDuration: 14, iterationStart: "2026-01-05" },
+        },
+      ]);
+      expect(mockOctokit.graphql).toHaveBeenCalledWith(
+        expect.stringContaining("fields(first: 100)"),
+        expect.anything()
+      );
+    });
+
+    it("reads a newly created single-select field by ID and returns assigned option IDs", async () => {
+      const field = {
+        __typename: "ProjectV2SingleSelectField",
+        id: "PVTSSF_new_status",
+        name: "Status",
+        dataType: "SINGLE_SELECT",
+        options: [{ id: "option-done", name: "Done", color: "GREEN", description: "Finished" }],
+      };
+      mockOctokit.graphql.mockImplementation(async (query, variables) => {
+        if (String(query).includes("createProjectV2Field(")) {
+          return { createProjectV2Field: { projectV2Field: field } };
+        }
+        if (String(query).includes("fields(first: 100)")) {
+          return { node: { fields: { nodes: [field] } } };
+        }
+        expect(String(query)).not.toMatch(/iterations\s*\{[^}]*\b(number|url)\b/);
+        expect(variables?.fieldName).toBe("Status");
+        return { node: { field } };
+      });
+      const created = await repository.createField("PVT_opaque", {
+        name: "Status",
+        type: "single_select",
+        options: [{ id: "", name: "Done", color: "GREEN" }],
+      });
+      expect(created.options).toEqual(field.options);
+    });
+
     it("should find a project by id", async () => {
       // Arrange
       const projectId = "PVT_kwDOLhQ7gc4AOEbH";
       const mockProjectResponse = {
         id: projectId,
+        number: 42,
+        url: "https://github.com/orgs/test-owner/projects/42",
         title: "Test Project",
         shortDescription: "Test Description",
         closed: false,
@@ -303,8 +419,8 @@ describe("GitHubProjectRepository", () => {
         title: mockProjectResponse.title,
         description: mockProjectResponse.shortDescription || "",
         owner: config.owner,
-        number: parseInt(projectId.split("_").pop() || "0", 10),
-        url: `https://github.com/orgs/${config.owner}/projects/${parseInt(projectId.split("_").pop() || "0", 10)}`,
+        number: 42,
+        url: "https://github.com/orgs/test-owner/projects/42",
         status: ResourceStatus.ACTIVE,
         visibility: "private", // Default value when not provided
         views: [],
